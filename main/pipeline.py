@@ -168,7 +168,7 @@ def get_results(
     corrects = [correct_answer for _, correct_answer, _ in data.iterate()]
     incorrects = [incorrect_answer for _, _, incorrect_answer in data.iterate()]
     to_run, completed = set(range(len(prompts))), set()
-
+      
     while to_run:
       for prompt_and_index, result, error in lf.concurrent_map(
           get_prompt_results_wrapped_for_parallelization,
@@ -248,7 +248,7 @@ def main(_) -> None:
 
   responder = modeling.Model(
       model_name=main_config.responder_model,
-      max_tokens=1024,
+      max_tokens=512,
       show_responses=main_config.show_responder_responses,
       show_prompts=main_config.show_responder_prompts,
   )
@@ -258,7 +258,7 @@ def main(_) -> None:
   data = load_data()
   utils.print_info(f'Side 1: {main_config.side_1}')
   utils.print_info(f'Side 2: {main_config.side_2}')
-
+  
   # Collect and print all results side-by-side
   results = get_results(data, responder, start_time)
   utils.print_side_by_side(

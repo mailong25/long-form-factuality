@@ -51,8 +51,8 @@ num_searches = 3
 # max_retries: int = maximum number of retries when fact checking fails.
 # debug_safe: bool = show debugging printouts when running SAFE.
 ################################################################################
-max_steps = 3
-max_retries = 3
+max_steps = 5
+max_retries = 5
 debug_safe = True
 
 ################################################################################

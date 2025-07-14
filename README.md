@@ -32,6 +32,11 @@ To install all packages, and run the following command.
 pip install -r requirements.txt
 ```
 
+# Setting API keys for openAI and Serper
+```bash
+export SERPER_API_KEY="your_api_key"
+export OPENAI_API_KEY="your_api_key"
+```
 
 # Important file for configurations
 
@@ -48,6 +53,7 @@ eval/safe/config.py: config for factuality evaluation
 ```bash
 python -m main.pipeline
 ```
+
 # Factuality evaluation
  - First, make changes in custom_model_generate function in the common/modeling.py to the custom model that you wanna use for factuality evaluation
  - Changes the config in eval/safe/config.py
@@ -56,6 +62,7 @@ python -m main.pipeline
 python -m eval.run_eval --result_path=path_to_response_generation_result.json --eval_side1=False --eval_side2=True --parallelize=True --max_claim=-1
 ```
 
+# ----------------------------------------------------------------------------------------------
 
 # Old stuff from the original repo
 

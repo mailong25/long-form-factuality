@@ -11,33 +11,72 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-##############################################################
-###### IMPLEMENT YOUR CUSTORM MODEL HERE ######
 import os
+import json
+import threading
+import hashlib
+from pathlib import Path
 import openai
 import logging
 logging.getLogger("openai").setLevel(logging.WARNING)
 
-OPENAI_API_KEY = ""
-OPENAI_MODEL_NAME = "gpt-4o-mini"
-
-def custom_model_generate(prompt, gen_temp, gen_max_tokens, timeout):
+##############################################################
+###### IMPLEMENT YOUR CUSTORM MODEL HERE ######
+MODEL_NAME = "gpt-4o-mini"
+def custom_llm_call(model_name, prompt, gen_temp, gen_max_tokens, timeout):
+    OPENAI_API_KEY = ""
     client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY", OPENAI_API_KEY))
-    messages = [{"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user",   "content": prompt},
-               ]
-    
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": prompt},
+    ]
     resp = client.chat.completions.create(
-                        model=OPENAI_MODEL_NAME,
-                        messages=messages,
-                        temperature=gen_temp,
-                        max_tokens=gen_max_tokens,
-                        timeout=timeout,
-                    )
+        model=model_name,
+        messages=messages,
+        temperature=gen_temp,
+        max_tokens=gen_max_tokens,
+        timeout=timeout,
+    )
     response_text = resp.choices[0].message.content.strip()
     return response_text
+##############################################################
 
+# Constants
+CACHE_FILE = "llm_cache.json"
+CACHE_LOCK = threading.Lock()
+
+# Ensure cache file exists
+Path(CACHE_FILE).touch(exist_ok=True)
+if os.stat(CACHE_FILE).st_size == 0:
+    with open(CACHE_FILE, "w") as f:
+        json.dump({}, f)
+
+def _make_cache_key(prompt, gen_temp, gen_max_tokens, model_name):
+    """
+    Generate a unique hash key for given input parameters.
+    """
+    key_data = f"{prompt}|{gen_temp}|{gen_max_tokens}|{model_name}"
+    return hashlib.sha256(key_data.encode("utf-8")).hexdigest()
+
+def _read_cache():
+    with CACHE_LOCK:
+        with open(CACHE_FILE, "r") as f:
+            return json.load(f)
+
+def _write_cache(cache):
+    with CACHE_LOCK:
+        with open(CACHE_FILE, "w") as f:
+            json.dump(cache, f, indent=2)
+
+def custom_model_generate(prompt, gen_temp, gen_max_tokens, timeout, model_name=MODEL_NAME):
+    cache_key = _make_cache_key(prompt, gen_temp, gen_max_tokens, model_name)
+    cache = _read_cache()
+    if cache_key in cache:
+        return cache[cache_key]
+    response_text = custom_llm_call(model_name, prompt, gen_temp, gen_max_tokens, timeout)
+    cache[cache_key] = response_text
+    _write_cache(cache)
+    return response_text
 ###############################################################
 
 
@@ -310,8 +349,7 @@ class Model:
             try:
                 response_text = custom_model_generate(prompt, gen_temp, gen_max_tokens, timeout)
             except Exception as e:
-                if do_debug:
-                    print(f"[Unexpected error attempt {attempt}]: {e}")
+                print(f"[Unexpected error attempt {attempt}]: {e}")
                 time.sleep(retry_interval)
         
         if do_debug:

@@ -11,11 +11,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Class for querying the Google Serper API."""
+"""Class for querying the Google Serper API with thread-safe JSON file caching."""
 
+import json
+import os
 import random
 import time
+import hashlib
+import threading
 from typing import Any, Optional, Literal
+from datetime import datetime, timedelta
 
 import requests
 
@@ -24,7 +29,10 @@ NO_RESULT_MSG = 'No good Google Search result was found'
 
 
 class SerperAPI:
-  """Class for querying the Google Serper API."""
+  """Class for querying the Google Serper API with thread-safe JSON file caching."""
+
+  # Class-level lock shared across all instances to ensure thread safety
+  _cache_lock = threading.Lock()
 
   def __init__(
       self,
@@ -34,6 +42,8 @@ class SerperAPI:
       k: int = 1,
       tbs: Optional[str] = None,
       search_type: Literal['news', 'search', 'places', 'images'] = 'search',
+      cache_file: str = 'serper_cache.json',
+      cache_expiry_hours: int = 240,
   ):
     self.serper_api_key = serper_api_key
     self.gl = gl
@@ -41,6 +51,8 @@ class SerperAPI:
     self.k = k
     self.tbs = tbs
     self.search_type = search_type
+    self.cache_file = cache_file
+    self.cache_expiry_hours = cache_expiry_hours
     self.result_key_for_type = {
         'news': 'news',
         'places': 'places',
@@ -48,9 +60,94 @@ class SerperAPI:
         'search': 'organic',
     }
 
+  def _generate_cache_key(self, query: str, **kwargs: Any) -> str:
+    """Generate a unique cache key for the query and parameters."""
+    cache_params = {
+        'query': query,
+        'gl': self.gl,
+        'hl': self.hl,
+        'k': self.k,
+        'tbs': self.tbs,
+        'search_type': self.search_type,
+        **kwargs
+    }
+    # Create a hash of the parameters for a unique key
+    cache_string = json.dumps(cache_params, sort_keys=True)
+    return hashlib.md5(cache_string.encode()).hexdigest()
+
+  def _load_cache(self) -> dict:
+    """Load cache from JSON file. Must be called within lock."""
+    if not os.path.exists(self.cache_file):
+      return {}
+    
+    try:
+      with open(self.cache_file, 'r', encoding='utf-8') as f:
+        return json.load(f)
+    except (json.JSONDecodeError, IOError):
+      # If file is corrupted or unreadable, start with empty cache
+      return {}
+
+  def _save_cache(self, cache: dict) -> None:
+    """Save cache to JSON file. Must be called within lock."""
+    try:
+      # Create directory if it doesn't exist
+      os.makedirs(os.path.dirname(self.cache_file) if os.path.dirname(self.cache_file) else '.', exist_ok=True)
+      
+      # Write to temporary file first, then rename for atomic operation
+      temp_file = f"{self.cache_file}.tmp"
+      with open(temp_file, 'w', encoding='utf-8') as f:
+        json.dump(cache, f, indent=2, ensure_ascii=False)
+      
+      # Atomic rename (on most systems)
+      os.replace(temp_file, self.cache_file)
+    except IOError as e:
+      # Clean up temp file if it exists
+      if os.path.exists(temp_file):
+        try:
+          os.remove(temp_file)
+        except OSError:
+          pass
+      # If we can't write to file, continue without caching
+      print(f"Warning: Could not save cache to {self.cache_file}: {e}")
+
+  def _is_cache_expired(self, timestamp: str) -> bool:
+    """Check if cache entry is expired."""
+    try:
+      cached_time = datetime.fromisoformat(timestamp)
+      expiry_time = cached_time + timedelta(hours=self.cache_expiry_hours)
+      return datetime.now() > expiry_time
+    except ValueError:
+      # If timestamp is invalid, consider it expired
+      return True
+
+  def _clean_expired_cache(self, cache: dict) -> dict:
+    """Remove expired entries from cache."""
+    cleaned_cache = {}
+    
+    for key, value in cache.items():
+      if isinstance(value, dict) and 'timestamp' in value:
+        if not self._is_cache_expired(value['timestamp']):
+          cleaned_cache[key] = value
+    
+    return cleaned_cache
+
   def run(self, query: str, **kwargs: Any) -> str:
-    """Run query through GoogleSearch and parse result."""
+    """Run query through GoogleSearch with thread-safe caching support."""
     assert self.serper_api_key, 'Missing serper_api_key.'
+    
+    # Generate cache key
+    cache_key = self._generate_cache_key(query, **kwargs)
+    
+    # Check cache first (thread-safe)
+    with self._cache_lock:
+      cache = self._load_cache()
+      
+      # Check if we have a valid cached result
+      if cache_key in cache and not self._is_cache_expired(cache[cache_key]['timestamp']):
+        return cache[cache_key]['result']
+    
+    # Make API call outside the lock to allow other threads to access cache
+    # while this thread is waiting for API response
     results = self._google_serper_api_results(
         query,
         gl=self.gl,
@@ -61,7 +158,71 @@ class SerperAPI:
         **kwargs,
     )
 
-    return self._parse_results(results)
+    parsed_result = self._parse_results(results)
+    
+    # Update cache (thread-safe)
+    with self._cache_lock:
+      # Reload cache in case it was modified by another thread
+      cache = self._load_cache()
+      
+      # Check again if another thread already cached this result
+      if cache_key in cache and not self._is_cache_expired(cache[cache_key]['timestamp']):
+        # Another thread already cached this, return their result
+        return cache[cache_key]['result']
+      
+      # Cache our result
+      cache[cache_key] = {
+        'result': parsed_result,
+        'timestamp': datetime.now().isoformat(),
+        'query': query,  # Store for debugging/reference
+        'search_type': self.search_type
+      }
+      
+      # Clean expired entries periodically (every 10th cache operation)
+      if len(cache) % 10 == 0:
+        cache = self._clean_expired_cache(cache)
+      
+      self._save_cache(cache)
+    
+    return parsed_result
+
+  def clear_cache(self) -> None:
+    """Clear all cached results. Thread-safe."""
+    with self._cache_lock:
+      if os.path.exists(self.cache_file):
+        try:
+          os.remove(self.cache_file)
+        except OSError:
+          pass
+
+  def get_cache_stats(self) -> dict:
+    """Get statistics about the cache. Thread-safe."""
+    with self._cache_lock:
+      cache = self._load_cache()
+      total_entries = len(cache)
+      expired_entries = sum(1 for entry in cache.values() 
+                           if isinstance(entry, dict) and 'timestamp' in entry 
+                           and self._is_cache_expired(entry['timestamp']))
+      
+      return {
+        'total_entries': total_entries,
+        'valid_entries': total_entries - expired_entries,
+        'expired_entries': expired_entries,
+        'cache_file': self.cache_file,
+        'cache_expiry_hours': self.cache_expiry_hours
+      }
+
+  def cleanup_expired_cache(self) -> int:
+    """Manually clean up expired cache entries. Returns number of entries removed."""
+    with self._cache_lock:
+      cache = self._load_cache()
+      original_size = len(cache)
+      cleaned_cache = self._clean_expired_cache(cache)
+      
+      if len(cleaned_cache) < original_size:
+        self._save_cache(cleaned_cache)
+      
+      return original_size - len(cleaned_cache)
 
   def _google_serper_api_results(
       self,
