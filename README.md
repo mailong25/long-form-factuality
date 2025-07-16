@@ -62,7 +62,7 @@ python -m main.pipeline
 python -m eval.run_eval --result_path=path_to_response_generation_result.json --eval_side1=False --eval_side2=True --parallelize=True --max_claim=-1
 ```
 
-# ----------------------------------------------------------------------------------------------
+# -------------------------------------------------------------
 
 # Old stuff from the original repo
 
