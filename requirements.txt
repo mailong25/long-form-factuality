@@ -111,3 +111,5 @@ wasabi==1.1.2
 weasel==0.3.4
 yarl==1.9.4
 openai==1.93.2
+mistralai==1.9.2
+xai-sdk==1.0.0
