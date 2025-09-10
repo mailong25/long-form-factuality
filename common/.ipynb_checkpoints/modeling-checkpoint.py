@@ -19,27 +19,22 @@ from pathlib import Path
 import openai
 import logging
 logging.getLogger("openai").setLevel(logging.WARNING)
+logging.getLogger("_client").setLevel(logging.WARNING)
+from helm.clients.custom_client import generate_response
 
 ##############################################################
 ###### IMPLEMENT YOUR CUSTORM MODEL HERE ######
-MODEL_NAME = "gpt-4o-mini"
+
+MODEL_NAME = os.getenv("GEN_MODEL").split('/')[1]
+MODEL_PROVIDER = os.getenv("GEN_MODEL").split('/')[0]
+
 def custom_llm_call(model_name, prompt, gen_temp, gen_max_tokens, timeout):
-    OPENAI_API_KEY = ""
-    client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY", OPENAI_API_KEY))
-    messages = [
-        {"role": "system", "content": "You are a helpful assistant."},
-        {"role": "user", "content": prompt},
-    ]
-    resp = client.chat.completions.create(
-        model=model_name,
-        messages=messages,
-        temperature=gen_temp,
-        max_tokens=gen_max_tokens,
-        timeout=timeout,
-    )
-    response_text = resp.choices[0].message.content.strip()
-    return response_text
-##############################################################
+    raw_request = {"provider": MODEL_PROVIDER, "model": MODEL_NAME,
+                   "prompt": prompt, "n" : 1,
+                   "temperature": gen_temp, "max_tokens": gen_max_tokens}
+    response = generate_response(raw_request)
+    return response['completions'][0]
+# ----------------------------------
 
 # Constants
 CACHE_FILE = "llm_cache.json"

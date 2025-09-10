@@ -29,10 +29,15 @@ import os
 # root_dir: str = path to folder containing all files for this project.
 # path_to_data: str = directory storing task information.
 # path_to_result: str = directory to output results.
+
 ################################################################################
+# prompt_postamble = """\
+# Provide as many specific details and examples as possible (such as names of \
+# people, numbers, events, locations, dates, times, etc.)
+# """
+
 prompt_postamble = """\
-Provide as many specific details and examples as possible (such as names of \
-people, numbers, events, locations, dates, times, etc.)
+Keep your response short with no more than 200 words.
 """
 
 openai_api_key = os.getenv("OPENAI_API_KEY", '')

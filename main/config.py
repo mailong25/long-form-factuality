@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Shared configuration across main experimentation files."""
-
+import os
 from common import shared_config
 
 ################################################################################
@@ -52,7 +52,7 @@ save_results = True
 #     'claude_instant',
 # ]
 ################################################################################
-responder_model_short = 'gpt_4' # you should change model directly in modeling.py file
+responder_model_short = os.getenv("EVAL_MODEL").replace('/','_')
 
 ################################################################################
 #                               DEBUG SETTINGS
@@ -78,8 +78,8 @@ show_responder_responses = False
 ################################################################################
 task_short = 'longfact_objects'
 shuffle_data = True
-max_num_examples = 5
-add_universal_postamble = False
+max_num_examples = int(os.getenv("MAX_EVAL_INSTANCES_HALU"))
+add_universal_postamble = True
 
 ################################################################################
 #                             ABLATION SETTINGS
@@ -99,7 +99,7 @@ response_length_postamble = (
 # responder_model: str = overridden by full model name.
 # task: Tuple[str, str, str] = overriden by model name and data fields.
 ################################################################################
-responder_model = shared_config.model_options[responder_model_short]
+responder_model = os.getenv("EVAL_MODEL").replace('/','_')
 task = (
     shared_config.task_options[task_short]
     if task_short in shared_config.task_options

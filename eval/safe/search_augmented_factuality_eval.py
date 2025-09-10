@@ -165,7 +165,7 @@ def classify_relevance_and_rate(
           utils.maybe_print_error(e)
           checked_statement, revised_fact_dict, past_steps_dict = None, {}, {}
           num_fails += 1
-
+      
       if isinstance(checked_statement, CheckedStatement):
         checked_statements.append(checked_statement)
         revised_fact_dicts.append(revised_fact_dict)

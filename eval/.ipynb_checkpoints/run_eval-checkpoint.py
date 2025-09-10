@@ -126,7 +126,7 @@ def evaluate_data(
     for prompt_data_and_index, result, error in lf.concurrent_map(
         add_rating_wrapped,
         [(item, i) for i, item in enumerate(result_data[_PER_PROMPT_DATA])],
-        max_workers=25,
+        max_workers=5,
         show_progress=show_progress_bar,
     ):
       if error or not result:
@@ -201,7 +201,7 @@ def main(_) -> None:
   utils.print_info(f'Evaluate `side 2` response: {_EVAL_SIDE2.value}')
   out_folder = shared_config.path_to_result
   out_name = (
-      datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S') + '-SAFE.json'
+      os.getenv("EVAL_MODEL").replace('/','_') + '-SAFE.json'
   )
   out_path = os.path.join(out_folder, out_name)
   utils.print_info(f'Saving result to:\n{out_path}', add_punctuation=False)

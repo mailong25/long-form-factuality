@@ -2,64 +2,41 @@
 
 ## Installation
 
-First, clone our GitHub repository.
-
 ```bash
 git clone https://github.com/mailong25/long-form-factuality.git
-```
-
-Then navigate to the newly-created folder.
-```bash
-cd long-form-factuality
-```
-
-Next, create a new Python 3.10+ environment using `conda`.
-
-```bash
-conda create --name longfact python=3.10
-```
-
-Activate the newly-created environment.
-
-```bash
-conda activate longfact
-```
-
-All external package requirements are listed in `requirements.txt`.
-To install all packages, and run the following command.
-
-```bash
-pip install -r requirements.txt
+git clone https://github.com/mailong25/helm.git
+cd helm
+pip install -e .
+pip install -r requirements_extra.txt
+cd ..
 ```
 
 # Setting API keys for openAI and Serper
 ```bash
 export SERPER_API_KEY="your_api_key"
 export OPENAI_API_KEY="your_api_key"
+# export other api keys (gemini, mistral, ...) if necessary
 ```
 
 # Important file for configurations
 
 ```bash
-common/modeling.py: you need to modify the custom_model_generate function to adapt to your custom LLM model.
 main/config.py: config for response generation
 eval/safe/config.py: config for factuality evaluation
 ```
 
 # Reponse generation
- - First, make changes in custom_model_generate function in the common/modeling.py to the custom model that you wanna use for response generation.
- - Changes the config in main/config.py
- - Then run:
 ```bash
+export EVAL_MODEL="openai/gpt-4.1-mini"
+export GEN_MODEL="$EVAL_MODEL"
+export MAX_EVAL_INSTANCES_HALU=20
 python -m main.pipeline
 ```
 
 # Factuality evaluation
- - First, make changes in custom_model_generate function in the common/modeling.py to the custom model that you wanna use for factuality evaluation
- - Changes the config in eval/safe/config.py
- - Then run:
 ```bash
-python -m eval.run_eval --result_path=path_to_response_generation_result.json --eval_side1=False --eval_side2=True --parallelize=True --max_claim=-1
+export GEN_MODEL="openai/gpt-4.1-mini"
+python -m eval.run_eval --result_path="results/$(echo "$EVAL_MODEL" | sed 's|/|_|g').json" --eval_side1=False --eval_side2=True --parallelize=True --max_claim=-1
 ```
 
 # ----------------------------------------------------------------------------------------------

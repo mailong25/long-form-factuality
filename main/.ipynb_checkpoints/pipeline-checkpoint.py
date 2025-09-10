@@ -52,9 +52,8 @@ _TOTAL_RUNTIME = 'total_runtime'
 
 OUT_PATH = os.path.join(
     shared_config.path_to_result,
-    datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S') + '.json',
+    os.getenv("EVAL_MODEL").replace('/','_') + '.json',
 )
-
 
 def maybe_add_postamble(
     prompt: str,
