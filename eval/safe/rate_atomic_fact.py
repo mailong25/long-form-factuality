@@ -287,7 +287,7 @@ Respond with only "YES" if they have the same meaning, or "NO" if they don't.
         
         try:
             response = self.openai_client.chat.completions.create(
-                model="gpt-4o-mini",  # or "gpt-3.5-turbo"
+                model="gpt-4.1-mini",
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=10,
                 temperature=0

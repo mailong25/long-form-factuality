@@ -21,6 +21,7 @@ import logging
 logging.getLogger("openai").setLevel(logging.WARNING)
 logging.getLogger("_client").setLevel(logging.WARNING)
 from helm.clients.custom_client import generate_response
+from datetime import datetime
 
 ##############################################################
 ###### IMPLEMENT YOUR CUSTORM MODEL HERE ######
@@ -50,7 +51,8 @@ def _make_cache_key(prompt, gen_temp, gen_max_tokens, model_name):
     """
     Generate a unique hash key for given input parameters.
     """
-    key_data = f"{prompt}|{gen_temp}|{gen_max_tokens}|{model_name}"
+    date_now = datetime.now().strftime("%Y-%m-%d")
+    key_data = f"{prompt}|{gen_temp}|{gen_max_tokens}|{model_name}|{date_now}"
     return hashlib.sha256(key_data.encode("utf-8")).hexdigest()
 
 def _read_cache():
@@ -63,15 +65,18 @@ def _write_cache(cache):
         with open(CACHE_FILE, "w") as f:
             json.dump(cache, f, indent=2)
 
-def custom_model_generate(prompt, gen_temp, gen_max_tokens, timeout, model_name=MODEL_NAME):
-    cache_key = _make_cache_key(prompt, gen_temp, gen_max_tokens, model_name)
-    cache = _read_cache()
-    if cache_key in cache:
-        return cache[cache_key]
-    response_text = custom_llm_call(model_name, prompt, gen_temp, gen_max_tokens, timeout)
-    cache[cache_key] = response_text
-    _write_cache(cache)
-    return response_text
+def custom_model_generate(prompt, gen_temp, gen_max_tokens, timeout, model_name=MODEL_NAME, use_cache = True):
+    if not use_cache:
+        return custom_llm_call(model_name, prompt, gen_temp, gen_max_tokens, timeout)
+    else:
+        cache_key = _make_cache_key(prompt, gen_temp, gen_max_tokens, model_name)
+        cache = _read_cache()
+        if cache_key in cache:
+            return cache[cache_key]
+        response_text = custom_llm_call(model_name, prompt, gen_temp, gen_max_tokens, timeout)
+        cache[cache_key] = response_text
+        _write_cache(cache)
+        return response_text
 ###############################################################
 
 
@@ -110,117 +115,6 @@ class Usage(pg.Object):
   prompt_tokens: int
   completion_tokens: int
 
-
-# class LMSamplingResult(lf.LMSamplingResult):
-#   """LMSamplingResult with usage information."""
-
-#   #usage: Usage | None = None
-
-
-# @lf.use_init_args(['model'])
-# class AnthropicModel(lf.LanguageModel):
-#   """Anthropic model."""
-
-#   model: pg.typing.Annotated[
-#       pg.typing.Enum(pg.MISSING_VALUE, _ANTHROPIC_MODELS),
-#       'The name of the model to use.',
-#   ] = 'claude-instant-1.2'
-#   api_key: Annotated[
-#       str | None,
-#       (
-#           'API key. If None, the key will be read from environment variable '
-#           "'ANTHROPIC_API_KEY'."
-#       ),
-#   ] = None
-
-#   def _on_bound(self) -> None:
-#     super()._on_bound()
-#     self.__dict__.pop('_api_initialized', None)
-
-#   @functools.cached_property
-#   def _api_initialized(self) -> bool:
-#     self.api_key = self.api_key or os.environ.get('ANTHROPIC_API_KEY', None)
-
-#     if not self.api_key:
-#       raise ValueError(
-#           'Please specify `api_key` during `__init__` or set environment '
-#           'variable `ANTHROPIC_API_KEY` with your Anthropic API key.'
-#       )
-
-#     return True
-
-#   @property
-#   def model_id(self) -> str:
-#     """Returns a string to identify the model."""
-#     return f'Anthropic({self.model})'
-
-#   def _get_request_args(
-#       self, options: lf.LMSamplingOptions
-#   ) -> dict[str, Any]:
-#     # Reference: https://docs.anthropic.com/claude/reference/messages_post
-#     args = dict(
-#         temperature=options.temperature,
-#         max_tokens=options.max_tokens,
-#         stream=False,
-#         model=self.model,
-#     )
-
-#     if options.top_p is not None:
-#       args['top_p'] = options.top_p
-#     if options.top_k is not None:
-#       args['top_k'] = options.top_k
-#     if options.stop:
-#       args['stop_sequences'] = options.stop
-
-#     return args
-
-#   def _sample(self, prompts: list[lf.Message]) -> list[LMSamplingResult]:
-#     assert self._api_initialized
-#     return self._complete_batch(prompts)
-
-#   def _set_logging(self) -> None:
-#     logger: logging.Logger = logging.getLogger('anthropic')
-#     httpx_logger: logging.Logger = logging.getLogger('httpx')
-#     logger.setLevel(logging.WARNING)
-#     httpx_logger.setLevel(logging.WARNING)
-
-#   def _complete_batch(
-#       self, prompts: list[lf.Message]
-#   ) -> list[LMSamplingResult]:
-#     def _anthropic_chat_completion(prompt: lf.Message) -> LMSamplingResult:
-#       content = prompt.text
-#       client = anthropic.Anthropic(api_key=self.api_key)
-#       response = client.messages.create(
-#           messages=[{'role': 'user', 'content': content}],
-#           **self._get_request_args(self.sampling_options),
-#       )
-#       model_response = response.content[0].text
-#       samples = [lf.LMSample(model_response, score=0.0)]
-#       return LMSamplingResult(
-#           samples=samples,
-#           usage=Usage(
-#               prompt_tokens=response.usage.input_tokens,
-#               completion_tokens=response.usage.output_tokens,
-#           ),
-#       )
-
-#     self._set_logging()
-#     return lf.concurrent_execute(
-#         _anthropic_chat_completion,
-#         prompts,
-#         executor=self.resource_id,
-#         max_workers=1,
-#         max_attempts=self.max_attempts,
-#         retry_interval=self.retry_interval,
-#         exponential_backoff=self.exponential_backoff,
-#         retry_on_errors=(
-#             anthropic.RateLimitError,
-#             anthropic.APIConnectionError,
-#             anthropic.InternalServerError,
-#         ),
-#     )
-
-
 class Model:
   """Class for storing any single language model."""
 
@@ -231,6 +125,7 @@ class Model:
       max_tokens: int = 2048,
       show_responses: bool = False,
       show_prompts: bool = False,
+      use_cache = True,
   ) -> None:
     """Initializes a model."""
     self.model_name = model_name
@@ -238,7 +133,7 @@ class Model:
     self.max_tokens = max_tokens
     self.show_responses = show_responses
     self.show_prompts = show_prompts
-    #self.model = self.load(model_name, self.temperature, self.max_tokens)
+    self.use_cache = use_cache
 
   def load(
       self, model_name: str, temperature: float, max_tokens: int
@@ -273,52 +168,6 @@ class Model:
     else:
       raise ValueError(f'ERROR: Unsupported model type: {model_name}.')
 
-  # def generate(
-  #     self,
-  #     prompt: str,
-  #     do_debug: bool = False,
-  #     temperature: Optional[float] = None,
-  #     max_tokens: Optional[int] = None,
-  #     max_attempts: int = 1000,
-  #     timeout: int = 60,
-  #     retry_interval: int = 10,
-  # ) -> str:
-  #   """Generates a response to a prompt."""
-  #   self.model.max_attempts = 1
-  #   self.model.retry_interval = 0
-  #   self.model.timeout = timeout
-  #   prompt = modeling_utils.add_format(prompt, self.model, self.model_name)
-  #   gen_temp = temperature or self.temperature
-  #   gen_max_tokens = max_tokens or self.max_tokens
-  #   response, num_attempts = '', 0
-
-  #   with modeling_utils.get_lf_context(gen_temp, gen_max_tokens):
-  #     while not response and num_attempts < max_attempts:
-  #       with futures.ThreadPoolExecutor() as executor:
-  #         future = executor.submit(lf.LangFunc(prompt, lm=self.model))
-
-  #         try:
-  #           response = future.result(timeout=timeout).text
-  #         except (
-  #             openai.error.OpenAIError,
-  #             futures.TimeoutError,
-  #             lf.core.concurrent.RetryError,
-  #             anthropic.AnthropicError,
-  #         ) as e:
-  #           utils.maybe_print_error(e)
-  #           time.sleep(retry_interval)
-
-  #       num_attempts += 1
-
-  #   if do_debug:
-  #     with _DEBUG_PRINT_LOCK:
-  #       if self.show_prompts:
-  #         utils.print_color(prompt, 'magenta')
-  #       if self.show_responses:
-  #         utils.print_color(response, 'cyan')
-
-  #   return response
-
   def generate(
         self,
         prompt: str,
@@ -330,8 +179,6 @@ class Model:
         retry_interval: int = 5,
     ) -> str:
         """
-        Uses modern OpenAI ChatCompletion API to generate a response to a prompt.
-        Retries on errors up to max_attempts.
         """
               
         gen_temp = temperature if temperature is not None else self.temperature
@@ -342,7 +189,7 @@ class Model:
         while attempt < max_attempts and not response_text:
             attempt += 1
             try:
-                response_text = custom_model_generate(prompt, gen_temp, gen_max_tokens, timeout)
+                response_text = custom_model_generate(prompt, gen_temp, gen_max_tokens, timeout, self.use_cache)
             except Exception as e:
                 print(f"[Unexpected error attempt {attempt}]: {e}")
                 time.sleep(retry_interval)

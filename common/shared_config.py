@@ -72,4 +72,4 @@ model_string = {
 task_options = {}
 root_dir = '/'.join(os.path.abspath(__file__).split('/')[:-2])
 path_to_data = 'datasets/'
-path_to_result = 'results/'
+path_to_result = os.getenv("CUR_DATE", '') + '/'

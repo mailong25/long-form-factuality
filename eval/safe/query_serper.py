@@ -264,50 +264,59 @@ class SerperAPI:
     return search_results
 
   def _parse_snippets(self, results: dict[Any, Any]) -> list[str]:
-    """Parse results."""
+    """Parse results with robust normalization (flatten lists, ensure strings)."""
+
+    def add(value):
+      """Normalize and append string or list-of-strings to snippets."""
+      if not value:
+        return
+      if isinstance(value, str):
+        snippets.append(value.replace('\n', ' '))
+      elif isinstance(value, list):
+        for v in value:
+          if isinstance(v, str):
+            snippets.append(v.replace('\n', ' '))
+          else:
+            snippets.append(str(v))
+      else:
+        snippets.append(str(value))
+
     snippets = []
 
+    # --- ANSWER BOX ---
     if results.get('answerBox'):
-      answer_box = results.get('answerBox', {})
-      answer = answer_box.get('answer')
-      snippet = answer_box.get('snippet')
-      snippet_highlighted = answer_box.get('snippetHighlighted')
+      answer_box = results['answerBox']
+      add(answer_box.get('answer'))
+      add(answer_box.get('snippet'))
+      add(answer_box.get('snippetHighlighted'))
 
-      if answer and isinstance(answer, str):
-        snippets.append(answer)
-      if snippet and isinstance(snippet, str):
-        snippets.append(snippet.replace('\n', ' '))
-      if snippet_highlighted:
-        snippets.append(snippet_highlighted)
-
+    # --- KNOWLEDGE GRAPH ---
     if results.get('knowledgeGraph'):
-      kg = results.get('knowledgeGraph', {})
+      kg = results['knowledgeGraph']
       title = kg.get('title')
+
       entity_type = kg.get('type')
-      description = kg.get('description')
-
       if entity_type:
-        snippets.append(f'{title}: {entity_type}.')
+        add(f'{title}: {entity_type}.')
 
-      if description:
-        snippets.append(description)
+      description = kg.get('description')
+      add(description)
 
       for attribute, value in kg.get('attributes', {}).items():
-        snippets.append(f'{title} {attribute}: {value}.')
+        add(f'{title} {attribute}: {value}.')
 
+    # --- ORGANIC RESULTS / MAIN LIST ---
     result_key = self.result_key_for_type[self.search_type]
-
     if result_key in results:
       for result in results[result_key][:self.k]:
-        if 'snippet' in result:
-          snippets.append(result['snippet'])
+        add(result.get('snippet'))
 
         for attribute, value in result.get('attributes', {}).items():
-          snippets.append(f'{attribute}: {value}.')
+          add(f'{attribute}: {value}.')
 
     if not snippets:
       return [NO_RESULT_MSG]
-
+    
     return snippets
 
   def _parse_results(self, results: dict[Any, Any]) -> str:

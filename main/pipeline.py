@@ -162,7 +162,7 @@ def get_results(
   if parallelize_across_prompts:
     utils.print_info('Running with parallelization.')
     original_stdout = sys.stdout
-    sys.stdout = io.StringIO()
+    #sys.stdout = io.StringIO()
     prompts = [prompt for prompt, _, _ in data.iterate()]
     corrects = [correct_answer for _, correct_answer, _ in data.iterate()]
     incorrects = [incorrect_answer for _, _, incorrect_answer in data.iterate()]
@@ -250,6 +250,7 @@ def main(_) -> None:
       max_tokens=512,
       show_responses=main_config.show_responder_responses,
       show_prompts=main_config.show_responder_prompts,
+      use_cache = False,
   )
   print_config('Responder', responder)
 
