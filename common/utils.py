@@ -190,14 +190,24 @@ def save_buffer(buffer: io.BytesIO, filepath: str) -> None:
 ################################################################################
 #                                   PRINTING                                   #
 ################################################################################
+
+def _safe_terminal_width(default: int = 80) -> int:
+  try:
+    return os.get_terminal_size().columns
+  except OSError:
+    return default
+
+
 def clear_line() -> None:
   """Clears the current line."""
-  print(' ' * os.get_terminal_size().columns, end='\r')
+  cols = _safe_terminal_width()
+  print(' ' * cols, end='\r')
 
 
 def print_divider() -> None:
   """Prints a dividing line as wide as the terminal."""
-  print('-' * os.get_terminal_size().columns)
+  cols = _safe_terminal_width()
+  print('-' * cols)
 
 
 def print_color(message: str, color: str) -> None:
@@ -246,8 +256,9 @@ def print_progress(sentence: str, progress: int, out_of: int) -> None:
   if progress == 0:
     print()
 
+  cols = _safe_terminal_width()
   sentence += f': {progress}/{out_of} '
-  num_remaining = os.get_terminal_size().columns - len(sentence) - 2
+  num_remaining = cols - len(sentence) - 2
 
   if num_remaining >= 5:
     num_fill = int(float(progress / out_of) * num_remaining) or 1
@@ -274,7 +285,6 @@ def print_side_by_side(
     for line in lines:
       current_chunk, current_length = '', 0
 
-      # Splitting the line based on ANSI escape codes
       fragments = ansi_escape.split(line)
 
       for fragment in fragments:
@@ -283,15 +293,8 @@ def print_side_by_side(
         else:
           for char in fragment:
             if current_length + len(char) > width:
-              # Wrap to next chunk
               chunks.append(current_chunk)
-
-              # Re-apply escape codes from previous line if they exist
-              if len(ansi_escape.findall(current_chunk)) >= 1:
-                current_chunk = '' + ansi_escape.findall(current_chunk)[-1]
-              else:
-                current_chunk = ''
-
+              current_chunk = ''
               current_length = 0
 
             current_chunk += char
@@ -304,15 +307,12 @@ def print_side_by_side(
 
   def pad_string_with_ansi(s: str, width: int) -> str:
     """Pad a string containing ANSI escape codes to the specified width."""
-    ansi_escape = re.compile(r'(\x1b[^m]*m)')  # Extract text without ANSI
+    ansi_escape = re.compile(r'(\x1b[^m]*m)')
     text_without_ansi = ansi_escape.sub('', s)
-
     padding_needed = width - len(text_without_ansi)
-    padded_string = s + ' ' * padding_needed
+    return s + ' ' * padding_needed
 
-    return padded_string
-
-  terminal_width = os.get_terminal_size().columns
+  terminal_width = _safe_terminal_width()
   per_column_width = (terminal_width - 3) // 2
   list1, list2 = [headers[0]] + list1, [headers[1]] + list2
 
@@ -322,9 +322,8 @@ def print_side_by_side(
     chunks2 = split_to_chunks(item2, per_column_width)
     max_chunks = max(len(chunks1), len(chunks2))
 
-    # Equalize number of chunks for both sides by adding empty strings
     while len(chunks1) < max_chunks:
-      chunks1.append('' * per_column_width)
+      chunks1.append('')
     while len(chunks2) < max_chunks:
       chunks2.append('')
 
