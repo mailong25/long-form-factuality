@@ -26,6 +26,8 @@ python -m eval.run_eval \
     --max_claim=-1
 ```
 """
+import absl.logging
+absl.logging.set_verbosity(absl.logging.ERROR)
 
 import copy
 import datetime
